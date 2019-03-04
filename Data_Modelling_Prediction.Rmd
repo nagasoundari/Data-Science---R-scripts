@@ -1,0 +1,342 @@
+---
+title: "IMT 573 Problem Set 7 - Prediction"
+author: "Naga Soundari Balamurugan"
+date: "Due: Tuesday, November 27, 2018"
+output: pdf_document
+---
+<!-- This syntax can be used to add comments that are ignored during knitting process. -->
+
+##### Collaborators: Dhaval Chedda, Jayashree Raman
+
+##### Instructions: #####
+
+Before beginning this assignment, please ensure you have access to R and RStudio. 
+
+1. Download the `problemset7.Rmd` file from Canvas. Open `problemset7.Rmd` in RStudio and supply your solutions to the assignment by editing `problemset7.Rmd`.
+
+2. Replace the "Insert Your Name Here" text in the `author:` field with your own full name. Any collaborators must be listed on the top of your assignment. 
+
+3. Be sure to include well-documented (e.g. commented) code chunks, figures and clearly written text chunk explanations as necessary. Any figures should be clearly labeled and appropriately referenced within the text. If you are using more than just a standard function that you found from another source, please credit the source in the comments. For example: 
+
+```{r citing, include=FALSE}
+# code adapted from "Example: Multiplication Table"  
+# https://www.datamentor.io/r-programming/examples/multiplication-table/
+
+
+# assign num
+num = 8
+# use for loop to iterate 10 times
+for(i in 1:10) {
+print(paste(num,'x', i, '=', num*i))
+}
+```
+
+4. Collaboration on problem sets is acceptable, and even encouraged, but students must turn in an individual write-up in their own words and their own work. The names of all collaborators must be listed on each assignment. Do not copy-and-paste from other students' responses or code.
+
+5. When you have completed the assignment and have **checked** that your code both runs in the Console and knits correctly when you click `Knit PDF` or `Knit Word`, rename the R Markdown file to `YourLastName_YourFirstName_ps7.Rmd`, knit a PDF or DOC and submit both the PDF/DOC and the Rmd file on Canvas.
+
+
+##### Setup: #####
+
+In this problem set you will need, at minimum, the following R packages.
+
+```{r Setup, message=FALSE}
+# Load standard libraries
+library(tidyverse)
+library(caTools)
+library(pROC)
+library(randomForest)
+library(caret)
+```
+
+\textbf{Data:} In this problem set we will use the \texttt{TransfusionData} dataset from Yeh, I-Cheng, Yang, King-Jang, and Ting, Tao-Ming, "Knowledge discovery on RFM  model using Bernoulli sequence, "Expert Systems with Applications, 2008  (doi:10.1016/j.eswa.2008.07.018). This dataset is currently being used for a competition on http://www.DrivenData.org. Information on the dataset and variables can be found at: https://archive.ics.uci.edu/ml/machine-learning-databases/blood-transfusion/transfusion.names.
+
+```{r Load data}
+# Load data called 'TransfusionData.csv'
+transfusionData <- read.csv("TransfusionData.csv")
+```
+
+#####Question 1a
+
+Describe each variable in the dataset. (Hint: use the reference listed in the above instructions).
+>The dataset has 748 rows and 5 columns. The columns are as follows:
+  >Recency..months: months since last donation
+  >Frequency..times : total number of donation
+  >Monetary..c.c..blood: total blood donated in c.c
+  >Time..months: months since first donation and
+  >whether.he.she.donated.blood.in.March.2007: a binary variable representing whether he/she donated    blood in March 2007 (1 stand for donating blood; 0 stands for not donating blood).
+
+
+#####Question 1b
+Prepare the data for easier processing. Describe what you did and why.
+
+```{r process data}
+colnames(transfusionData) <- c("Recency", "Frequency", "Monetary", "Time", "Donated")
+```
+
+>I have changed the column names of the dataset for easy access and more readability.
+
+#####Question 1c
+Provide some basic summary statistics to become more familiar with the dataset.
+
+```{r summary}
+summary(transfusionData)
+```
+
+####Question 2
+As part of this assignment we will evaluate the performance of a few different statistical learning methods.  We will fit a particular statistical learning method on a set of \emph{training} observations and measure its performance on a set of \emph{test} observations. 
+
+#####Question 2a 
+Discuss the advantages of using a training/test split when evaluating statistical models.
+
+> Using the whole dataset for both training and test would overfit the data and might not work well(predict) for the any new data. Splitting the dataset into training/test data gives us the advantage of training over one set and testing over the same dataset but not the exact same datapoints. Thus it helps us in generalizing and building up a better model.
+
+>As honest assessments of the performance of our predictive models can be done using the split, it could help us to compare the performances of different predictive modeling procedures.
+
+
+#####Question 2b
+Split your data into a \emph{training} and \emph{test} set based on an 80-20 split, in other words, 80\% of the observations will be in the training set. Use the code below (substituting in your own variable names) so that everyone has the same split.
+
+```{r data split}
+# code adapted from https://rpubs.com/ID_Tech/S1 AND https://stackoverflow.com/a/31634462
+
+# Set seed for reproducibility
+set.seed(112718)
+# splits the data in the ratio mentioned in SplitRatio. After splitting marks these rows as logical 
+# TRUE and the the remaining are marked as logical FALSE
+sample = sample.split(transfusionData$Donated, SplitRatio = .8)
+# creates a training dataset named train with rows which are marked as TRUE
+donor_train = subset(transfusionData, sample == TRUE)
+# creates a training dataset named test with rows which are marked as FALSE
+donor_test  = subset(transfusionData, sample == FALSE)
+```
+
+
+####Question 3 
+
+In this problem set our goal is to predict whether someone will donate blood in March 2007. First consider training a simple logistic regression model for whether an individual donated blood in March 2007 based on frequency of donations. 
+
+#####Question 3a 
+Fit the model described above using the \texttt{glm} function in R. 
+
+```{r logistic}
+#Logistic model
+model_glm <- glm(Donated ~ Frequency, family = "binomial", data = donor_train)
+summary(model_glm)
+```
+
+#####Question 3b 
+Describe in your own words your interpretation of the model summary. (Run a summary function of your model if you haven't already.) 
+
+>From the summary statistics, we can see that we have a very significant z-scores of Frequency(less than 0.05). The AIC score is 636.53 but it cannot be used to predict the goodness of fit as the number itself is not meaningful. If one have more than one similar candidate models, then he/she should select the model that has the smallest AIC. The null deviance shows how well the response variable is predicted by the model that includes only the intercept (grand mean). We have a value of 655.566 on 597 degrees of freedom. Including the independent variable (Frequency) decreased the deviance to 632.529 points on 596 degrees of freedom, a significant reduction in deviance. The Residual Deviance has reduced by 23 with a loss of one degrees of freedom.
+
+####Question 4 
+Next, let's consider the performance of this model. 
+
+#####Question 4a 
+Predict donations in March 2007 for each observation in your test set using the model fit in Question 3a. Save these predictions as `y_hat`.
+
+```{r prediction}
+#Predictions
+donor_test$y_hat <- predict(model_glm, donor_test, type = "response")
+```
+
+
+#####Question 4b
+Use a threshold of 0.4 to classify predictions. Using a confusion matrix, what is the number of false positives on the test data? Interpret this in your own words.
+
+```{r classification}
+donor_test$Prediction <- ifelse(donor_test$y_hat > 0.4, 1, 0)
+confMatrixResults <- confusionMatrix(data = factor(donor_test$Prediction), 
+                                     reference = factor(donor_test$Donated))
+confMatrixResults
+```
+
+>There is **1 false positive** in the prediction using the logistic model. From the confusion matrix, we can see that out of total 150(113 + 33 + 1 + 3) predictions, 116(113 + 3) predictions are done right and 34(33 + 1) are wrong. Among the incorrect 34 predictions, 1 is false positive and 33 are false negatives. 
+
+#####Question 4c
+Calculate the accuracy rate of your y_hat predictions.
+
+```{r accuracy rate}
+tot_correct_predictions <- 113 + 3  #total correct predictions
+tot_predictions <- 113 + 33 + 1 + 3 #total predictions made
+accuracy <- (tot_correct_predictions/tot_predictions) * 100
+accuracy
+```
+
+>The accuracy rate of the predictions based on the above logistic model is **77.33%**.
+
+#####Question 4d 
+Using the \texttt{roc} function (or similar), plot the ROC curve for this model. Discuss what you find.
+
+```{r ROC}
+#ROC curve
+roc_glm <- roc(donor_test$Donated ~ donor_test$Prediction)
+plot(roc_glm)
+
+#Determine the area under the ROC curve
+auc(roc_glm)
+```
+
+> The area under the curve is 0.5372. The area is not close to 1 and we cannot see a top left curve, but has a fair value.
+
+####Question 5
+Suppose we use the data to construct a new predictor variable based on a donor's average number of months between donations. 
+
+
+#####Question 5a 
+Why might this be an interesting variable to help predict whether an individual will donate in March 2007?
+
+>As we know the time interval between each donation from the above variable, based on the last donation we can know if the person would donate blood in March 2007. Hence this would be more apt to predict if the person would donate blood.  
+
+#####Question 5b 
+Write a function to add this predictor to your *full dataset*. Call this variable `month_span_between_donations`.
+
+```{r new predictor variable}
+transfusionData$month_span_between_donations <- transfusionData$Time/transfusionData$Frequency
+```
+
+Rerun the train test split
+```{r}
+# creates a training dataset named train with rows which are marked as TRUE
+donor_train <- subset(transfusionData, sample == TRUE)
+# creates a training dataset named test with rows which are marked as FALSE
+donor_test <- subset(transfusionData, sample == FALSE)
+```
+
+
+#####Question 5c
+Fit a second logistic regression model including *only* this new feature. Use the \texttt{summary} function to look at the model. How does this model compare to the model in question 3a? 
+
+```{r logistic model new feature}
+model_glm_avg_months <- glm(Donated ~ month_span_between_donations, family = "binomial", 
+                            data = donor_train)
+summary(model_glm_avg_months)
+```
+
+>This model is better compared to the model that was built with the independent variable 'Frequency' in question 3a, as the AIC value is lower(607.52 < 636.53). 
+
+#####Question 5d 
+Repeat questions 4a and 4b for this new model. Save these new predictions as `y_hat2`. Interpret this new confusion matrix in your own words.
+
+```{r prediction avg months}
+#Predictions
+donor_test$y_hat2 <- predict(model_glm_avg_months, donor_test, type = "response")
+```
+
+```{r classification avg months}
+donor_test$Prediction2 <- ifelse(donor_test$y_hat2 > 0.4, 1, 0)
+confMatrixResults <- confusionMatrix(data = factor(donor_test$Prediction2), 
+                                     reference = factor(donor_test$Donated))
+confMatrixResults
+```
+
+>There is **no false positive** in this prediction using the logistic model built with average number of months between donation. From the confusion matrix, we can see that out of total 150(114 + 35 + 0 + 1) predictions, 115(114 + 1) predictions are done right and 35 are wrong. All the 35 incorrect predictions are false negatives. The accuracy rate of the predictions based on the above logistic model is **76.66%**.
+
+
+#####Question 5e 
+Use the \texttt{glm} function to fit a multiple logistic regression model with monetary and recency as predictors and make predictions for the test set. Save these predictions as `y_hat3`.
+
+```{r multiple logistic regression}
+model_glm_multiple <- glm(Donated ~ Monetary + Recency, family = "binomial", 
+                            data = donor_train)
+summary(model_glm_multiple)
+```
+
+```{r Prediction and classification}
+#Predictions
+donor_test$y_hat3 <- predict(model_glm_multiple, donor_test, type = "response")
+
+#Classification
+donor_test$Prediction3 <- ifelse(donor_test$y_hat3 > 0.4, 1, 0)
+confMatrixResults <- confusionMatrix(data = factor(donor_test$Prediction3), 
+                                     reference = factor(donor_test$Donated))
+confMatrixResults
+```
+
+#####Question 5f
+Calculate the accuracy rate of your y_hat3 predictions.
+
+>From the summary of confusion matrix, we can see that the accuracy rate of y_hat3 predictions is **76%**.
+
+#####Question 5f
+Create a correlation matrix for the donorData (without the donated March 2007 variable). What do you notice?
+
+```{r correlation matrix}
+#Find the correlation between each variables
+corr_Matrix <- cor(transfusionData)
+corr_Matrix
+```
+
+>From the correlation matrix, we notice that there is no significant high correlation between donated variable with any other variable. The highest correlation of donated variable is with Recency which is a negative correlation of 0.2798. There is a high positive correlation between month_span_between_donations and Recency variable which is intutive. Also there is a good positive correlation between Frequency/Monetary variable with Time. The correlation between Frequency and Time was to be anticipated. The more frequent the people have donated, the earlier they started donating.
+
+#####Question 5g
+We have a very limited set of variables in this datset from which to build a model. If you could add in new data or create other calculated variables to aid in model building what would you add and why? (Must include at least 2 additional variables with explanation for full credit.)
+
+>stopped_donate: Recency/Time - If this number comes around 1, it means that the person has not donated blood since a long time. So, value closer to 1 would have stopped donating blood.
+
+>donation_rate: Frequency/Time - This provides us the average number of donations per month. Thus
+higher the rate, more likely to the person to continue blood donation.
+
+####Question 6
+Another very popular classifier used in data science is called a \emph{random  forest}\footnote{\url{https://www.stat.berkeley.edu/\~breiman/RandomForests/cc_home.htm}}.
+
+####Question 6a 
+Use the \texttt{randomForest} function to fit a random forest model with monetary and recency as predictors. Make predictions for the test set using the random forest model. Save these predictions as `y_hat4`.
+
+```{r random forest}
+model_rf <- randomForest(Donated ~ Monetary + Recency, data = donor_train, 
+                         importance=TRUE, proximity=TRUE)
+summary(model_rf)
+
+#Predictions
+donor_test$y_hat4 <- predict(model_rf, donor_test, type = "response")
+
+```
+
+
+```{r random forest classification}
+
+#Classification
+donor_test$Prediction4 <- ifelse(donor_test$y_hat4 > 0.4, 1, 0)
+confMatrixResults <- confusionMatrix(data = factor(donor_test$Prediction4), 
+                                     reference = factor(donor_test$Donated))
+confMatrixResults
+```
+
+>The accuracy rate of the model built using random forest with the variables monetary and recency is **76%**.
+
+####Question 6b 
+Compare the accuracy of each of the models from this problem set using ROC curves. What have you learned about logistic regression and random forest from this dataset? 
+
+```{r}
+roc_glm_2 <- roc(donor_test$Donated ~ donor_test$Prediction2)
+roc_glm_3 <- roc(donor_test$Donated ~ donor_test$Prediction3)
+roc_glm_4 <- roc(donor_test$Donated ~ donor_test$Prediction4)
+
+plot(roc_glm)
+title("ROC curve for model with Frequency variable")
+auc(roc_glm)
+
+plot(roc_glm_2)
+title("ROC curve for model with new variable(month_span_between_donations)")
+auc(roc_glm_2)
+
+plot(roc_glm_3)
+title("ROC curve for multiple logistic regression model")
+auc(roc_glm_3)
+
+plot(roc_glm_4)
+title("ROC curve for Random Forest model")
+auc(roc_glm_4)
+
+
+
+plot(roc_glm)
+plot(roc_glm_2, add=TRUE, col='green')
+plot(roc_glm_3, add=TRUE, col='maroon')
+plot(roc_glm_4, add=TRUE, col='blue')
+title("ROC curve comparison")
+```
+
+>Though the accuracy rates are similar for all the models, the area under curve is comparatively high for random forest than logistic regression. But the number of false positives are less in logistic regression model than random forest model. Also the balanced accuracy rate is higher for random forest compared to other models. Random forest has a balanced accuracy rate of 66.15% while Logistic Regression has a Balanced Accuracy rate of around 51%-54% as per the values calculated earlier. 

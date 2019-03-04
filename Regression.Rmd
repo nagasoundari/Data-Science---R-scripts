@@ -1,0 +1,412 @@
+---
+title: 'IMT 573: Problem Set 6 - Regression'
+author: "Naga Soundari Balamurugan"
+date: 'Due: Tuesday, November 13, 2018'
+output: pdf_document
+---
+
+<!-- This syntax can be used to add comments that are ignored during knitting process. -->
+
+##### Collaborators: Jayashree Raman
+
+##### Instructions: #####
+
+Before beginning this assignment, please ensure you have access to R and RStudio. 
+
+1. Download the `problemset6.Rmd` file from Canvas. Open `problemset6.Rmd` in RStudio and supply your solutions to the assignment by editing `problemset6.Rmd`.
+
+2. Replace the "Insert Your Name Here" text in the `author:` field with your own full name. Any collaborators must be listed on the top of your assignment. 
+
+3. Be sure to include well-documented (e.g. commented) code chucks, figures and clearly written text chunk explanations as necessary. Any figures should be clearly labeled and appropriately referenced within the text. If you are using more than just a standard function that you found from another source, please credit the source in the comments. For example: 
+
+```{r citing, include=FALSE}
+# code adapted from "Example: Multiplication Table"  
+# https://www.datamentor.io/r-programming/examples/multiplication-table/
+
+
+# assign num
+num = 8
+# use for loop to iterate 10 times
+for(i in 1:10) {
+print(paste(num,'x', i, '=', num*i))
+}
+```
+
+4. Collaboration on problem sets is acceptable, and even encouraged, but students must turn in an individual write-up in their own words and their own work. The names of all collaborators must be listed on each assignment. Do not copy-and-paste from other students' responses or code.
+
+5. When you have completed the assignment and have **checked** that your code both runs in the Console and knits correctly when you click `Knit PDF` or `Knit Word`, rename the R Markdown file to `YourLastName_YourFirstName_ps6.Rmd`, knit a PDF or DOC and submit both the PDF/DOC and the Rmd file on Canvas.
+
+
+##### Setup: #####
+
+In this problem set you will need, at minimum, the following R packages.
+
+```{r Setup, message=FALSE}
+# Load standard libraries
+library(tidyverse)
+library(MASS) # Modern applied statistics functions
+library(kableExtra)
+library(ISLR)
+library(leaps)
+library(ggplot2)
+```
+
+\textbf{Housing Values in Suburbs of Boston}
+
+In this problem we will use the Boston dataset that is available in the \texttt{MASS} package. This dataset contains information about median house value for 506 neighborhoods in Boston, MA. Load this data and use it to answer the following questions.
+
+### 1. Describe the data and variables that are part of the \texttt{Boston} dataset. Tidy data as necessary.
+
+```{r read data}
+#Read in Boston housing data
+Boston_data <- MASS::Boston
+
+str(Boston_data)
+no_of_rows <- nrow(Boston_data)
+no_of_cols <- ncol(Boston_data)
+
+#Rename the column headers for more readability
+colnames(Boston_data) <- c("CrimeRate", "BigLots_Proportion", "Business_Proportion",
+                           "CharlesRiver", "NO_Concentration", "Avg_Num_rooms", "Owner_Prop",
+                           "Employ_Distance", "Highway_Access", "Taxrate", "Teacher_Ratio",
+                           "Black_Proportion", "Lower_Status", "Median_Owner")
+```
+
+
+The Boston data frame has 506 rows and 14 columns. This data frame contains the following columns:
+
+CrimeRate - per capita crime rate by town.
+BigLots_Proportion - proportion of residential land zoned for lots over 25,000 sq.ft.
+Business_Proportion - proportion of non-retail business acres per town.
+CharlesRiver - Charles River dummy variable (= 1 if tract bounds river; 0 otherwise).
+NO_Concentration - nitrogen oxides concentration (parts per 10 million).
+Avg_Num_rooms - average number of rooms per dwelling.
+Owner_Prop - proportion of owner-occupied units built prior to 1940.
+Employ_Distance - weighted mean of distances to five Boston employment centres.
+Highway_Access - index of accessibility to radial highways.
+Taxrate - full-value property-tax rate per \$10,000.
+Teacher_Ratio - pupil-teacher ratio by town.
+Black_Proportion - 1000(Bk - 0.63)^2 where Bk is the proportion of blacks by town.
+Lower_Status - lower status of the population (percent).
+Median_Owner - median value of owner-occupied homes in \$1000s.
+
+### 2. Consider this data in context, what is the response variable of interest? Discuss how you think some of the possible predictor variables might be associated with this response.
+
+```{r correlarion}
+
+#Find the correlation between each variables
+corr_Matrix <- cor(Boston_data)
+
+corr_Matrix
+
+# #Displays the correlation matrix
+# kable(corr_Matrix, "latex") %>% kable_styling(bootstrap_options = 
+#                                                 c("striped", "hover", "scale_down"))
+```
+
+
+>Out of the above data, **CrimeRate is the response variable**. At a first glance, every variable except the Charles river dummy variable, looks like a predictor variable of the crime rate. After a deeper look, I expected the predictor variables to be Teacher_Ratio, BigLots_Proportion, Black_Proportion etc., The reason behind is a lower Teacher-student ratio might lead to lesser educational status and higher crime rate. Also plenty of bigger lots could to lesser security and high chance of crime. But after running the correlation test, the possible predictor variables(ones with comparatively high correlation rate) could be Business_Proportion, NO_Concentration, Owner_Prop, Employ_Distance, Highway_Access, Taxrate, Black_Proportion, Lower_Status, Median_Owner. 
+
+### 3. For each predictor, fit a simple linear regression model to predict the response. In which of the models is there a statistically significant association between the predictor and the response? Create some plots to back up your assertions. 
+
+```{r linear models}
+
+#Linear regression model for Crime Rate vs BigLots_Proportion
+lm_BigLots_Proportion <- lm(CrimeRate ~ BigLots_Proportion, data = Boston_data)
+summary(lm_BigLots_Proportion)
+
+#Linear regression model for Crime Rate vs Business_Proportion
+lm_Business_Proportion <- lm(CrimeRate ~ Business_Proportion, data = Boston_data)
+summary(lm_Business_Proportion)
+
+#Linear regression model for Crime Rate vs CharlesRiver
+lm_CharlesRiver <- lm(CrimeRate ~ CharlesRiver, data = Boston_data)
+summary(lm_CharlesRiver)
+
+#Linear regression model for Crime Rate vs Nitrogen oxide concentration
+lm_NOX_Con <- lm(CrimeRate ~ NO_Concentration, data = Boston_data)
+summary(lm_NOX_Con)
+
+#Linear regression model for Crime Rate vs Avg_Num_rooms
+lm_Avg_Num_rooms <- lm(CrimeRate ~ Avg_Num_rooms, data = Boston_data)
+summary(lm_Avg_Num_rooms)
+
+#Linear regression model for Crime Rate vs Owner_Prop
+lm_Owner_Prop <- lm(CrimeRate ~ Owner_Prop, data = Boston_data)
+summary(lm_Owner_Prop)
+
+#Linear regression model for Crime Rate vs Employ_Distance
+lm_Employ_Distance <- lm(CrimeRate ~ Employ_Distance, data = Boston_data)
+summary(lm_Employ_Distance)
+
+#Linear regression model for Crime Rate vs Highway_Access
+lm_Highway_Access <- lm(CrimeRate ~ Highway_Access, data = Boston_data)
+summary(lm_Highway_Access)
+
+#Linear regression model for Crime Rate vs Taxrate
+lm_Taxrate <- lm(CrimeRate ~ Taxrate, data = Boston_data)
+summary(lm_Taxrate)
+
+#Linear regression model for Crime Rate vs Teacher_Ratio
+lm_Teacher_Ratio <- lm(CrimeRate ~ Teacher_Ratio, data = Boston_data)
+summary(lm_Teacher_Ratio)
+
+#Linear regression model for Crime Rate vs Black_Proportion
+lm_Black_Proportion <- lm(CrimeRate ~ Black_Proportion, data = Boston_data)
+summary(lm_Black_Proportion)
+
+#Linear regression model for Crime Rate vs Lower_Status
+lm_Lower_Status <- lm(CrimeRate ~ Lower_Status, data = Boston_data)
+summary(lm_Lower_Status)
+
+#Linear regression model for Crime Rate vs Median_Owner
+lm_Median_Owner<- lm(CrimeRate ~ Median_Owner, data = Boston_data)
+summary(lm_Median_Owner)
+```
+
+
+>Among the above linear models, all of them are statistically significant except the CharlesRiver variable. But the models with Owner_Prop, Taxrate, Black_Proportion and Median_Owner does not show high association(Bad coefficient values) with the CrimeRate variable. This leaves us with the variables - Business_Proportion, NO_Concentration, Employ_Distance, Highway_Access and Lower_Status. Let us find the correlation between these variables.
+
+>Thus these variable could be fitted against the residuals to check the correctness of the model
+
+```{r residuals}
+plot(lm_BigLots_Proportion$residuals, main = "Residual plot of Biglots Proportion")
+abline(h = 0, col = "red") 
+
+plot(lm_Business_Proportion$residuals, main = "Residual plot of Business Proportion")
+abline(h = 0, col = "red")  
+
+plot(lm_NOX_Con$residuals, main = "Residual plot of NO_Concentration")
+abline(h = 0, col = "red") 
+
+plot(lm_Avg_Num_rooms$residuals, main = "Residual plot of Avg_Num_rooms")
+abline(h = 0, col = "red") 
+
+plot(lm_Owner_Prop$residuals, main = "Residual plot of Owner_Prop")
+abline(h = 0, col = "red")
+
+plot(lm_Employ_Distance$residuals, main = "Residual plot of Employ_Distance")
+abline(h = 0, col = "red")  
+
+plot(lm_Highway_Access$residuals, main = "Residual plot of Highway_Access")
+abline(h = 0, col = "red") 
+
+plot(lm_Taxrate$residuals, main = "Residual plot of Taxrate")
+abline(h = 0, col = "red")
+
+plot(lm_Teacher_Ratio$residuals, main = "Residual plot of Teacher_Ratio")
+abline(h = 0, col = "red")
+
+plot(lm_Black_Proportion$residuals, main = "Residual plot of Black_Proportion")
+abline(h = 0, col = "red")
+
+plot(lm_Lower_Status$residuals, main = "Residual plot of Lower_Status")
+abline(h = 0, col = "red") 
+
+plot(lm_Median_Owner$residuals, main = "Residual plot of Median_Owner")
+abline(h = 0)
+
+```
+
+>All the above models have a good residual plot with the data points consistently spread across 0. Though there are few datapoints at 400 that are far away from 0, it might not affect significantly as the proportion is less comparatively low.
+
+
+### 4. Fit a multiple regression model to predict the response using all of the predictors. Describe your results. For which predictors can we reject the null hypothesis $H_0: \beta_j = 0$?
+
+```{r}
+lm_multiple <- lm(CrimeRate ~ ., data = Boston_data)
+summary(lm_multiple)
+```
+
+>From the multiple regression model, We can reject the null hypothesis for the predictors whose p-values are significant. Those are (in order of high significance), Employ_Distance, Highway_Access, Median_Owner, Business_Proportion, BigLots_Proportion, Black_Proportion and NO_Concentration repectively. As the p-values for all the other coefficients are higher than 0.05, the null hypothesis cannot be rejected. 
+
+### 5. How do your results from (3) compare to your results from (4)? Create a plot displaying the univariate regression coefficients from (3) on the x-axis and the multiple regression coefficients from part (4) on the y-axis. Use this visualization to support your response.
+
+```{r}
+#Create a list consisting of all the univariates from the linear regression model
+univariate <- lm_BigLots_Proportion$coefficients[2]
+univariate <- append(univariate, lm_Business_Proportion$coefficients[2])
+univariate <- append(univariate, lm_CharlesRiver$coefficients[2])
+univariate <- append(univariate, lm_NOX_Con$coefficients[2])
+univariate <- append(univariate, lm_Avg_Num_rooms$coefficients[2])
+univariate <- append(univariate, lm_Owner_Prop$coefficients[2])
+univariate <- append(univariate, lm_Employ_Distance$coefficients[2])
+univariate <- append(univariate, lm_Highway_Access$coefficients[2])
+univariate <- append(univariate, lm_Taxrate$coefficients[2])
+univariate <- append(univariate, lm_Teacher_Ratio$coefficients[2])
+univariate <- append(univariate, lm_Black_Proportion$coefficients[2])
+univariate <- append(univariate, lm_Lower_Status$coefficients[2])
+univariate <- append(univariate, lm_Median_Owner$coefficients[2])
+
+#Create a list consisting of all the multivariates from the multiple regression model
+multivariate <- lm_multiple$coefficients[2:14]
+
+variatedf <-  as.data.frame(cbind(univariate, multivariate))
+
+#Plot univariates against multivariates
+plot(univariate, multivariate, main = "Univariate vs. Multiple Regression Coefficients", 
+    xlab = "Univariate", ylab = "Multiple regression")
+with(variatedf, text(variatedf$univariate ~ variatedf$multivariate, 
+                     labels = row.names(variatedf), pos = 4))
+
+
+ggplot(variatedf, aes(univariate, multivariate)) + 
+  geom_point(stat = "identity", colour = "red", size = 3) +
+  geom_text(label = rownames(variatedf), size = 2, hjust = 1)
+```
+
+>By comparing linear and multiple regression models, we see that most of the significant variables are similar except the Lower_Status variable. But after running the multiple regression model, we found more variables that are significant like Black_Proportion, Median_Owner and BigLots_Proportion. Also from the plot, we see that most of the datapoints are close to 0 except the NO_Concentration variable.
+
+### 6. Is there evidence of a non-linear association between any of the predictors and the response? To answer this question, for each predictor $X$ fit a model of the form:
+
+$$ Y = \beta_0 + \beta_1 X + \beta_2 X^2 + \beta_3 X^3 + \epsilon $$
+```{r non-linear model}
+
+#Non-linear regression model for Crime Rate vs BigLots_Proportion
+nlm_BigLots_Proportion <- lm(CrimeRate ~ BigLots_Proportion + I(BigLots_Proportion^2) +
+                              I(BigLots_Proportion^3), data = Boston_data)
+summary(nlm_BigLots_Proportion)
+
+#Non-linear regression model for Crime Rate vs Business_Proportion
+nlm_Business_Proportion <- lm(CrimeRate ~ Business_Proportion + I(Business_Proportion^2) +
+                               I(Business_Proportion^3), data = Boston_data)
+summary(nlm_Business_Proportion)
+
+#Non-linear regression model for Crime Rate vs CharlesRiver
+nlm_CharlesRiver <- lm(CrimeRate ~ CharlesRiver + I(CharlesRiver^2) +
+                         I(CharlesRiver^3), data = Boston_data)
+summary(nlm_CharlesRiver)
+
+#Non-Linear regression model for Crime Rate vs Nitrogen oxide concentration
+nlm_NOX_Con <- lm(CrimeRate ~ NO_Concentration + I(NO_Concentration^2) +
+                    I(NO_Concentration^3), data = Boston_data)
+summary(nlm_NOX_Con)
+
+#Non-Linear regression model for Crime Rate vs Avg_Num_rooms
+nlm_Avg_Num_rooms <- lm(CrimeRate ~ Avg_Num_rooms + I(Avg_Num_rooms^2) +
+                          I(Avg_Num_rooms^3), data = Boston_data)
+summary(nlm_Avg_Num_rooms)
+
+#Non-Linear regression model for Crime Rate vs Owner_Prop
+nlm_Owner_Prop <- lm(CrimeRate ~ Owner_Prop + I(Owner_Prop^2) +
+                       I(Owner_Prop^3), data = Boston_data)
+summary(nlm_Owner_Prop)
+
+#Non-Linear regression model for Crime Rate vs Employ_Distance
+nlm_Employ_Distance <- lm(CrimeRate ~ Employ_Distance + I(Employ_Distance^2) + 
+                            I(Employ_Distance^3), data = Boston_data)
+summary(nlm_Employ_Distance)
+
+#Non-Linear regression model for Crime Rate vs Highway_Access
+nlm_Highway_Access <- lm(CrimeRate ~ Highway_Access + I(Highway_Access^2) +
+                           I(Highway_Access^3), data = Boston_data)
+summary(nlm_Highway_Access)
+
+#Non-Linear regression model for Crime Rate vs Taxrate
+nlm_Taxrate <- lm(CrimeRate ~ Taxrate + I(Taxrate^2) + 
+                    I(Taxrate^3), data = Boston_data)
+summary(nlm_Taxrate)
+
+#Non-Linear regression model for Crime Rate vs Taxrate
+nlm_Teacher_Ratio <- lm(CrimeRate ~ Teacher_Ratio + I(Teacher_Ratio^2) + 
+                          I(Teacher_Ratio^3), data = Boston_data)
+summary(nlm_Teacher_Ratio)
+
+#Non-Linear regression model for Crime Rate vs Black_Proportion
+nlm_Black_Proportion <- lm(CrimeRate ~ Black_Proportion + I(Black_Proportion^2) +
+                             I(Black_Proportion^3), data = Boston_data)
+summary(nlm_Black_Proportion)
+
+#Non-Linear regression model for Crime Rate vs Lower_Status
+nlm_Lower_Status <- lm(CrimeRate ~ Lower_Status + I(Lower_Status^2) + 
+                         I(Lower_Status^3), data = Boston_data)
+summary(nlm_Lower_Status)
+
+#Non-Linear regression model for Crime Rate vs Median_Owner
+nlm_Median_Owner<- lm(CrimeRate ~ Median_Owner + I(Median_Owner^2) +
+                        I(Median_Owner^3), data = Boston_data)
+summary(nlm_Median_Owner)
+```
+
+>The first thing to note is that with the CharlesRiver variable, we get NA values for the squared and cubed term. This makes sense as CharlesRiver is a dummy variable, composed of only 0s and 1s, and these values will not change if they are squared or cubed.
+
+>With the variables Business_Proportion, NO_Concentration, Employ_Distance, Teacher_Ratio and Median_Owner, there is evidence of a non-linear relationship, as each of these variables squared and cubed terms is found to be statistically signficant (we reject the null hypothesis that the coeffecients on these exponentiated variables are zero). Owner_Prop also appears to have a non-linear relationship, as once squared-age and cubed-age are brought into the model, linear age becomes statistically insignficant.
+
+>For every other variable, we do not find evidence of a non-linear relationship between the predictor and outcome variables.
+
+### 7. Consider performing a stepwise model selection procedure to determine the best fit model. Discuss your results. How is this model different from the model in (4)?
+
+```{r}
+fwd_stepwise_fit <- regsubsets(CrimeRate ~. , data = Boston_data, nvmax = 13, method = "forward")
+summary(fwd_stepwise_fit)
+
+bkwd_stepwise_fit <- regsubsets(CrimeRate ~. , data = Boston_data, nvmax = 13, method = "backward")
+summary(bkwd_stepwise_fit)
+```
+
+>For instance, we see that using forward stepwise selection, the best one-variable model contains only Highway_Access, and the best two-variable model additionally includes Lower_Status. In the backward selection process, the best-one variable model contains the same Highway_Access variable whereas, the best two-variable model includes the Median_Owner.
+
+>Rest of all the variables differ from each other in both the models. From the **forward stepwise selection** process, the best fit model could have the variables - **Highway_Access, Lower_Status, Black_Proportion, Median_Owner, BigLots_Proportion** respectively. Similarly, from the **backward stepwise selection** process, the best fit model could have the variables - **Highway_Access, Median_Owner, Employ_Distance, BigLots_Proportion, Black_Proportion** respectively. Thus only the Median_Owner and Employ_Distance differ in the top 5 best fit variables from both the approaches.
+
+>From the **multiple regression model** we fit in (4), the variables with high significance are -
+**Employ_Distance, Highway_Access, Median_Owner, Business_Proportion, BigLots_Proportion, Black_Proportion and NO_Concentration**. Almost all the variables that had high significance in multiple regression model is same as that of the stepwise selection model except the buiness_Proportion and NO_Concentration variable.
+
+>These are significant in the multiple regression model whereas its ranked with lower significance in the stepwise selection approach.
+
+
+### 8. Evaluate the statistical assumptions in your regression analysis from (7) by performing a basic analysis of model residuals and any unusual observations. Discuss any concerns you have about your model.
+
+```{r}
+plot(fwd_stepwise_fit)
+plot(bkwd_stepwise_fit)
+
+
+#######Forward selection
+summary_fwd_stepwise_fit <- summary(fwd_stepwise_fit)
+par(mfrow = c(2, 2))
+
+plot(summary_fwd_stepwise_fit$cp, xlab = "Number of variables", ylab = "C_p", type = "l")
+points(which.min(summary_fwd_stepwise_fit$cp),
+       summary_fwd_stepwise_fit$cp[which.min(summary_fwd_stepwise_fit$cp)], 
+       col = "red", cex = 2, pch = 20)
+
+plot(summary_fwd_stepwise_fit$bic, xlab = "Number of variables", ylab = "BIC", type = "l")
+points(which.min(summary_fwd_stepwise_fit$bic),
+       summary_fwd_stepwise_fit$bic[which.min(summary_fwd_stepwise_fit$bic)], 
+       col = "red", cex = 2, pch = 20)
+
+plot(summary_fwd_stepwise_fit$adjr2, xlab = "Number of variables", ylab = "Adjusted R^2", type = "l")
+points(which.max(summary_fwd_stepwise_fit$adjr2),
+       summary_fwd_stepwise_fit$adjr2[which.max(summary_fwd_stepwise_fit$adjr2)], 
+       col = "red", cex = 2, pch = 20)
+mtext("Plots of C_p, BIC and adjusted R^2 for forward stepwise selection", side = 3, 
+      line = -2, outer = TRUE)
+
+
+########Backward selection
+summary_bkwd_stepwise_fit <- summary(bkwd_stepwise_fit)
+par(mfrow = c(2,2))
+
+plot(summary_bkwd_stepwise_fit$cp, xlab = "Number of variables", ylab = "C_p", type = "l")
+points(which.min(summary_bkwd_stepwise_fit$cp),
+       summary_bkwd_stepwise_fit$cp[which.min(summary_bkwd_stepwise_fit$cp)], 
+       col = "red", cex = 2, pch = 20)
+
+plot(summary_bkwd_stepwise_fit$bic, xlab = "Number of variables", ylab = "BIC", type = "l")
+points(which.min(summary_bkwd_stepwise_fit$bic),
+       summary_bkwd_stepwise_fit$bic[which.min(summary_bkwd_stepwise_fit$bic)], 
+       col = "red", cex = 2, pch = 20)
+
+plot(summary_bkwd_stepwise_fit$adjr2, xlab = "Number of variables", ylab = "Adjusted R^2", 
+     type = "l")
+points(which.max(summary_bkwd_stepwise_fit$adjr2),
+       summary_bkwd_stepwise_fit$adjr2[which.max(summary_bkwd_stepwise_fit$adjr2)], 
+       col = "red", cex = 2, pch = 20)
+mtext("Plots of C_p, BIC and adjusted R^2 for backward stepwise selection", side = 3, 
+      line = -2, outer = TRUE)
+```
+
+
+>From the forward selection process, based on CP value we pick a 8 variable model, on BIC we pick a 3 variable model and on Adjusted R^2, we pick a 9 variable model. It is similar for the backward selection process except we select a 4-model variable on BIC values. Almost all of the adjusted R squared values(12 variables) are around 0.4 for both the forward and backward selection process, whereas from the residual plot we could pick only 9 variables. 
+
+

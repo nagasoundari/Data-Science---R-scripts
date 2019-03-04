@@ -1,0 +1,248 @@
+---
+title: 'IMT 573: Problem Set 1 - Exploring Data'
+author: "Naga Soundari Balamurugan"
+date: 'Due: Tuesday, October 9, 2018 at or before 11:59AM'
+output: pdf_document
+---
+
+<!-- This syntax can be used to add comments that are ignored during knitting process. -->
+
+##### Collaborators: Jayashree Raman
+
+##### Instructions: #####
+
+Before beginning this assignment, please ensure you have access to R and RStudio. 
+
+1. Download the `problemset1.Rmd` file from Canvas. Open `problemset1.Rmd` in RStudio and supply your solutions to the assignment by editing `problemset1.Rmd`. 
+
+2. Replace the "Insert Your Name Here" text in the `author:` field with your own full name. Any collaborators must be listed on the top of your assignment. 
+
+3. Be sure to include well-documented (e.g. commented) code chucks, figures and clearly written text chunk explanations as necessary. Any figures should be clearly labeled and appropriately referenced within the text. If you are using more than just a standard function that you found from another source, please credit the source in the comments. For example: 
+
+```{r citing}
+# code adapted from "Example: Multiplication Table"  https://www.datamentor.io/r-programming/examples/multiplication-table/
+
+# assign num
+num = 8
+# use for loop to iterate 10 times
+for(i in 1:10) {
+print(paste(num,'x', i, '=', num*i))
+}
+```
+
+4. Collaboration on problem sets is acceptable, and even encouraged, but each student must turn in an individual write-up in his or her own words and his or her own work. The names of all collaborators must be listed on each assignment. Do not copy-and-paste from other students' responses or code.
+
+5. When you have completed the assignment and have **checked** that your code both runs in the Console and knits correctly when you click `Knit PDF`, rename the R Markdown file to `YourLastName_YourFirstName_ps1.Rmd`, knit a PDF and submit both the PDF file on Canvas.
+
+##### Setup: #####
+
+In this problem set you will need, at minimum, the following R packages. If you haven't yet installed them you will need to begin by using `install.packages()`
+
+```{r Setup, message=FALSE}
+# Load standard libraries
+library(tidyverse)
+library(nycflights13)
+library(dplyr)
+library(kableExtra)
+```
+
+#### Problem 1: Exploring the NYC Flights Data ####
+
+In this problem set we will use the data on all flights that departed NYC (i.e. JFK, LGA or EWR) in 2013. You can find this data in the `nycflights13` R package. 
+
+##### (a) Importing and Inspecting Data: ##### 
+Load the data and describe in a short paragraph how the data was collected and what each variable represents. Perform a basic inspection of the data and discuss what you find.
+
+```{r exploredata, message=FALSE}
+#List all the functions in the nycflights13 package
+ls("package:nycflights13")
+
+#Exploring the airlines dataset
+nycflights_airlines <- nycflights13::airlines
+str(nycflights_airlines)
+nrow(nycflights_airlines)
+head(nycflights_airlines)
+tail(nycflights_airlines)
+
+#Exploring the airports dataset
+nycflights_airports <- nycflights13::airports
+str(nycflights_airports)
+nrow(nycflights_airports)
+head(nycflights_airports)
+tail(nycflights_airports)
+
+#Exploring the flights dataset
+nycflights_flights <- nycflights13::flights
+str(nycflights_flights)
+nrow(nycflights_flights)
+head(nycflights_flights)
+tail(nycflights_flights)
+
+#Exploring the planes dataset
+nycflights_planes <- nycflights13::planes
+str(nycflights_planes)
+nrow(nycflights_planes)
+head(nycflights_planes)
+tail(nycflights_planes)
+
+#Exploring the weather dataset
+nycflights_weather <- nycflights13::weather
+str(nycflights_planes)
+nrow(nycflights_planes)
+head(nycflights_planes)
+tail(nycflights_planes)
+
+```
+
+
+>The nycflights13 package has 5 different datasets which includes the details of airlines, airports, flights, planes and weather. It includes very detailed data of each segment which are as follows.
+
+The **airlines** dataframe has 16 rows of data with 2 columns which are the airplane code and its name.
+
+The **airports** dataframe has 8 columns and of 1458 rows. This dataframe has details specific to an airport location like latitude, longitude, altitude, airport's name, zone etc.,
+
+The **flights** dataframe has 19 columns and of 336, 776 rows. It has all the details of the flights from the year 2013. The details include date, departure time, scheduled departure time, delay, arrival time, scheduled arrival time, flying time, distance, origin, destination etc.,
+
+The **planes** dataframe has 9 columns and of 3322 rows. As the name indicates, this dataframe has all the details related to the planes like its number, type, manufactured yaer, model, engine, no of seats, speed etc.,
+
+The **weather** dataframe has 15 columns and of 26115 rows. This dataframe has a hour specific weather information for the year 2013. The details include temperature, humidity, wind direction, wind speed, precipitation, pressure, visibility etc.,
+
+
+##### (b) Formulating Questions: ##### 
+Consider the NYC flights data. Formulate two motivating questions you want to explore using this data. Describe why these questions are interesting and how you might go about answering them. 
+
+```{r nycFlights, message=FALSE}
+#Explore all the columns to find interesting connections
+str(nycflights_flights)
+
+#To find the unique flights in nycflights dataset
+uniqueFlights <- unique(nycflights_flights$flight)
+NoOfUniqueFlights <- length(uniqueFlights)
+
+uniqueCarriers <- unique(nycflights_flights$carrier)
+NoOfUniqueCarriers <- length(uniqueCarriers)
+```
+
+At a very first glance, the factor that caught me are the delay in departure and arrival timings of the flight. There dataset contains flight details of 3844 planes of 16 carriers and hence I would like to pose a question, **"which are the top 5 airlines that got delayed the most?"**. By finding the answer to this question, the reason for delay could also then be explored by drilling down to flight details(i.e., flight number) and comparing it against weather(if it is because of bad weather condition) and planes(if the model is obselete, engine condition etc.,) dataset.  This could help to improve the airline services by eliminating the delays and the passengers could be satisfied. 
+
+>This can be found from the variable dep_delay(delay in departure) and carrier(Two letter carrier abbreviation). The data can be sorted on the basis of dep_delay variable and the top 10 could be filtered out.
+
+Another question that strike my mind of is **To which cities are there most and least flights from Newyork?**. This could help us to find the frequency of flights to different locations and if there is any specific reason behind them. As a next step, we could also explore if the frequency need to be increased or decreased to certain locations. 
+
+> In order to answer this, we could go with exploring the variable dest(destination). The frequency of each destination needs to be measured to find the most and least accessible location from Newyork through air.
+
+
+##### (c) Exploring Data: ##### 
+
+For each of the questions you proposed in Problem 1b, perform an exploratory data analysis designed to address the question. At a minimum, you should produce two visualizations related to each question. Be sure to describe what the visuals show and how they speak to your question of interest. 
+
+```{r delay, message=FALSE}
+#Filter the flights that had delays
+delayedFlights <- subset(nycflights_flights, nycflights_flights$dep_delay > 0)
+
+#Group the flights by carrier and sum the delay time
+delayByCarrier <- delayedFlights %>%  group_by(carrier) %>% 
+  dplyr::summarize(count = n(), TotalDelay = sum(dep_delay)) %>%
+  select(carrier, count, TotalDelay) 
+
+#Display the table that contains the list of carriers with total delay time and the no of times delayed
+kable(delayByCarrier) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+>To explore in detail about each variable ?nycflights13::flights is used. The variable dep_delay denotes delay in minutes and negative number indicates early departure.
+
+From the table delayByCarrier, we can see the number of times each airlines delayed and the total time delayed. This table is used to get the below visualization.
+
+```{r delay viz, message=FALSE}
+#Sort the data by no of times delayed
+delayByCarrier_count <- delayByCarrier %>% arrange(desc(count))
+
+#Sort the data by total time delay
+delayByCarrier_time <- delayByCarrier %>% arrange(desc(TotalDelay))
+
+delaybyCount <- ggplot(data = head(delayByCarrier_count, 5), aes(x = carrier, y = count)) +
+  geom_bar(stat="identity", fill = "red") + 
+  geom_text(aes(label=count), color="black", size=3.5) +
+  ggtitle("Plot of Carriers by No.of times delayed")
+
+delaybyCount
+
+delaybyTime <- ggplot(data = head(delayByCarrier_time, 5), aes(x = carrier, y = TotalDelay)) +
+  geom_bar(stat="identity", fill = "maroon") + 
+  geom_text(aes(label=TotalDelay), color="black", size=3.5) +
+  ggtitle("Plot of Carriers by Total time delay") + ylab("Time delay in Mins")
+
+delaybyTime
+
+```
+
+From the above plots we can see that the airlines UA(United Airlines Inc.), EV(Express Jet Airlines Inc.), B6(JetBlue Airways), DL(Delta Air Lines Inc.) and AA(American Airlines Inc.) got delayed the most by both factors(no of times delayed and total time delayed). The Delta Airlines and American Airlines remains in fourth and fifth place respectively for both the factors. But the order of top 3 airlines is affected for both the factors. The top 3 most delayed airlines in order,
+    By total time delayed - Express Jet Airlines, JetBlue Airways and United Airlines. 
+    By No of times delayed - United Airlines, Express Jet Airlines and JetBlue Airlines.
+    
+Though all these airlines does not fall under the budget airlines category except JetBlue and Express Jet, these has the most frequent delays. Hence there should be some other reason that needs to be explored.
+    
+>To explore the second question, "To which cities are there most and least flights from Newyork?", we would use the variable dest which is a three letter representation of the cities and it can then be mapped through nycflights13::airports data.
+
+```{r cities count, message=FALSE}
+#To find the number of cities that has flights from Newyork
+destinationcities <- unique(nycflights_flights$dest)
+NoOfDestinationCities <- length(destinationcities)
+NoOfDestinationCities
+```
+
+>There are flights to 105 differet cities from Newyork.
+
+```{r cities, message=FALSE}
+#Group the flights by destination cities and calculate the frequency
+citiesFrequency <- nycflights_flights %>%  group_by(dest) %>% 
+  dplyr::summarize(count = n()) %>%
+  select(dest, count)
+
+#Sort the data by frequency of flights
+citiesFrequencySorted <- citiesFrequency %>% arrange(desc(count))
+
+#Top 10 cities that has most flights from Newyork
+MostFreqCities <- head(citiesFrequencySorted, 10)
+kable(MostFreqCities) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+
+#Top 10 cities that has least number of flights from Newyork
+LeastFreqCities <- tail(citiesFrequencySorted, 10)
+kable(LeastFreqCities) %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+The plots for these tables are shown below.
+
+```{r citiesViz, message=FALSE}
+#cities that has most flights from Newyork
+MostFreqCitiesViz <- ggplot(data = MostFreqCities, aes(x = dest, y = count)) +
+  geom_bar(stat="identity", fill = "darkgreen") + 
+  geom_text(aes(label=count), color="black", size=3.5) +
+  ggtitle("Top 10 cities with most no of flights from NY") + ylab("Cities")
+
+MostFreqCitiesViz
+
+#cities that has most flights from Newyork
+LeastFreqCitiesViz <- ggplot(data = LeastFreqCities, aes(x = dest, y = count)) +
+  geom_bar(stat="identity", fill = "orange") + 
+  geom_text(aes(label=count), color="black", size=3.5) +
+  ggtitle("Top 10 cities with least no of flights from NY") + ylab("Cities")
+
+LeastFreqCitiesViz
+```
+
+
+From the visualization that shows the cities with most no of flights, we can see that the cities _Atlanta, Boston, Charlotte(NC), Ronald Reagan(VA), Fort Lauderdale(FL), Los Angeles, Orlando(FL), Miami, Ohare(chicago), San Francisco_ has most number of flights from Newyork. As I guessed, most of these cities are in the east side of the United States except Los angeles and San Franciso. Since these both cities are the central hub of international arrivals and departures, there should be frequent flights from NewYork. 
+
+The vizualisation with the least no of flights shows that, the cities _Ketucky, LaGuardia(NY), Anchorage(AK), Indiana, Colorado, Hayden(Colorado), KeyWest(FL), Palm springs(CA), Wyoming, Montana_ has the least number of flights. By just glancing through the list we can know that these airports are of smaller size and does not have much activity. Also these cities are not hub for any major industries or businesses. Thus this explains the reason behind the less frequency of flights.
+
+
+##### (d) Challenge Your Results: ##### 
+
+After completing the exploratory analysis from Problem 1c, do you have any concerns about your findings? Comment on any ethical and/or privacy concerns you have with your analysis. 
+
+>This dataset was really a good one and has so many interesting variables that could be explored. I would like to explore deeper on the questions I have analysed. In the flights dataset, the variables dep_delay and arr_delay had negative values which means that those flights were early. Hence it does not make sense to have them in the dataset.  
+
+>I was considered about if these airlines have any privacy concerns on the details about the flight model, engine details etc., Listing the most delayed airlines could affect the brand value of the airlines as well. Also, as these data are opensourced and the visualization about the cities gives a clear cut picture of flights with most and least passengers, anyone could access it for a negative cause. 
+
+

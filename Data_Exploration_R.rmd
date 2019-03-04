@@ -1,0 +1,604 @@
+---
+title: "Final Exam"
+author: "Naga Soundari Balamurugan"
+date: "December 3, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, message = FALSE, warning = FALSE}
+#Include all the necessary libraries
+library(dplyr) #To group, filter, summarize data
+library(kableExtra) #Display as formatted table
+library(caTools) #Splitting data into train and test data
+library(leaps)
+library(bestglm) #To find best subset of predictors
+library(caret) #For the confusionMatric
+#library(car) #For using scatterplotMatrix
+library(corrplot)
+library(MASS) #For stepwise regression model
+library(DAAG) #For cross-validation
+library(tree) #For fitting trees
+library(randomForest) #For building random forest models
+library(pROC) #To plot the ROC curves
+```
+
+
+# Problem 1 (25 pts)
+
+For this portion of the exam you will use data from: Dua, D. and Karra Taniskidou, E. (2017). UCI Machine Learning Repository http://archive.ics.uci.edu/ml. Irvine, CA: University of California, School of Information and Computer Science. This dataset is currently being used in a DrivenData competition. You can find more information about the dataset on the DrivenData or UCI ML Repo websites. The heartData.csv "dataset is from a study of heart disease that has been open to the public for many years. The study collects various measurements on patient health and cardiovascular statistics, and of course makes patient identities anonymous" (DrivenData: Predicting Heart Disease).
+
+```{r read heartData}
+#Read data from the csv file
+heartData <- read.csv("heartData.csv")
+```
+
+### (a) Describe the participants (you must include a written response with your code output). Use descriptive, summarization, and exploratory techniques to describe the participants in the study. For example, what proportion of participants are female? What is the average age of participants?
+
+```{r description, warning = FALSE}
+#Total no of rows
+no_of_rows <- nrow(heartData)
+no_of_rows
+
+#Find number of female and male - 0 is female, 1 is male
+no_of_female <- heartData %>% filter(sex == 0) %>% count()
+no_of_female
+
+no_of_male <- heartData %>% filter(sex == 1) %>% count()
+no_of_male
+
+
+#Create a table with gender and heart_disease_present columns
+plotTable <- table(heartData$heart_disease_present, heartData$sex)
+
+#Assign the rownames and column names
+rownames(plotTable) <- c("No Heart Disease", "Heart Disease")
+colnames(plotTable) <- c("Female", "Male")
+
+#Stacked plot of disease by gender
+barplot(plotTable, main="Fig.1a.1: Presence of heart disease by Gender",
+  xlab="Gender", ylab = "Count", col=c("darkgreen","red"),
+ 	legend = rownames(plotTable), args.legend = list(x = "topleft", bty = "n", inset=c(0.1, 0.1)))
+
+
+#Summary of distrubution of age
+age_summary <- as.array(summary(heartData$age))
+kable(age_summary, "latex") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+
+#Age distribution by count
+hist(heartData$age, main = "Fig.1a.2: Histogram of age of heartData", xlab = "Age", 
+     ylab = "Count", col = "lightblue")
+
+#Histogram of blood pressure
+hist(heartData$resting_blood_pressure, main = "Fig.1a.3: Histogram of Blood pressure", 
+     xlab = "Blood Pressure", ylab = "Count", col = "orange")
+```
+
+>The dataset has **16 columns** and **180 rows**. Among them **56 are entries of female** and **124 are male entries**. Exploring in depth, lets see the presence of disease among both the genders. From the Fig.1a.1, we can see that the number of males who has disease(69) is higher than the number of female with disease(11). In short, only **19.6% of female** has heart disease whereas **55.6% male** has heart disease. 
+
+>Next step would be analyzing the age group of the dataset. From the table with summary of age, we can see that the average age of the people in the dataset is 55. Fig.1a.1 clearky shows the age distribution. Most of the people fall under the age group **50 - 65**. We could also see an approximately normal distribution of age. 
+
+>As our dataset is about the heart disease, lets check how the blood pressure ranges are. The normal blood pressure for adults is 90-120 mm Hg. But in our case, there are many people whose blood pressure are higher than 120 mm Hg. This can be seen from the histogram in Fig.1a.3. Though the ideal blood pressure varies based on gender and age, lets explore it in the following analysis.
+
+
+### (b) We want to explore the characteristics of participants who have been diagnosed with heart disease. The data includes a binary outcome variable heart_disease_present. Describe what the values within this variable signify.
+
+```{r heart_disease_present, warning = FALSE}
+unique(heartData$heart_disease_present)
+```
+
+
+>As the type of the variable signifies, the binary variable "heart_disease_present" has two values 0 and 1. 0 refers that the person does not have a heart disease and 1 refers that the person has heart disease.
+
+
+### (c) Describe the potential explanatory (independent, predictor) variables in this dataset.
+
+>There are 16 coulumns in total in which heart_disease_present is the dependent variable and X, patient_id are unique identifier variables. Thus excluding these 3 variables, all the other 13 variables could be the predictor variables. Variables like resting_blood_pressure, num_major_vessels, resting_ekg_results, serum_cholesterol_mg_per_dl, chest_pain_type, age and sex could be important predictors(with high weigtage). 
+>
+  + *resting_blood_pressure:  Resting blood pressure (in mm Hg on admission to the hospital) 
+  + *num_major_vessels: Number of major vessels (0-3) colored by flourosopy 
+  + *resting_ekg_results: Resting electrocardiographic results(0-2) where, 
+      + 0 - Normal,
+      + 1 - Having ST-T wave abnormality (T wave inversions and/or ST elevation or depression of > 0.05 mV) 
+      + 2 - Showing probable or definite left ventricular hypertrophy by Estes' criteria 
+  + *serum_cholesterol_mg_per_dl: Serum cholestoral in mg/dl 
+  + *chest_pain_type: Type of chest pain(1-4) where,
+      +1: typical angina 
+      +2: atypical angina 
+      +3: non-anginal pain 
+      +4: asymptomatic 
+  + *age: Age of the person
+  + *sex: Gender of the person
+  
+  
+### (d) Split your data into a training and test set based on an 70-30 split, in other words, 70% of the observations will be in the training set (you do not need to create a validation set for this exercise).
+
+```{r train/test, warning = FALSE}
+# code adapted from https://rpubs.com/ID_Tech/S1 AND https://stackoverflow.com/a/31634462
+# Set seed for reproducibility
+set.seed(112718)
+# splits the data in the ratio mentioned in SplitRatio. After splitting marks these rows as logical
+# TRUE and the the remaining are marked as logical FALSE
+sample <- sample.split(heartData$heart_disease_present, SplitRatio = .7)
+# creates a training dataset named train with rows which are marked as TRUE
+heart_trainData <- subset(heartData, sample == TRUE)
+# creates a training dataset named test with rows which are marked as FALSE
+heart_testData <- subset(heartData, sample == FALSE)
+```
+
+
+### (e) Use an appropriate regression model to explore the relationship between having a diagnosis of heart disease (or not) and all other characteristics in your training data. Comment on which covariates seem to be predictive of having heart disease and which do not.
+
+```{r regression model, warning = FALSE}
+heart_glm <- glm(heart_disease_present ~ . -X -patient_id, 
+                 family = "binomial", data = heart_trainData)
+
+summary(heart_glm)
+```
+
+>The above model takes all the columns except X and patient_id as input and 'heart_disease_present' variable as dependent variable. From the summary of the model, we can see that only very few variables are significant. Those are num_major_vessels, chest_pain_type and sex in the order of significance. All other variables do not seem to be significant as their z-values are greater than 0.05.
+
+
+### (f) Use an all subsets model selection procedure (note that this is slightly different from stepwise selection: helpful reference) to obtain a "best" fit model for your training data. Is the model different from the full model you fit in part (e)? Which variables are included in the "best" fit model? (You might find the bestglm() function available in the bestglm package helpful.)
+
+```{r bestglm, warning = FALSE}
+#Remove the unwanted variables(X and patient_id)
+variables_to_keep <- c("slope_of_peak_exercise_st_segment", "thal",
+                      "resting_blood_pressure", "chest_pain_type", "num_major_vessels", 
+                      "fasting_blood_sugar_gt_120_mg_per_dl", "resting_ekg_results", 
+                      "serum_cholesterol_mg_per_dl", "oldpeak_eq_st_depression", "sex", 
+                      "age", "max_heart_rate_achieved", "exercise_induced_angina",
+                      "heart_disease_present")
+
+input_bestglm <- heart_trainData[variables_to_keep]
+
+#The outcome variable must be named y
+input_bestglm <- within(input_bestglm, {
+      y  <- heart_disease_present       # heart_disease_present into y
+    heart_disease_present  <- NULL        # Delete heart_disease_present
+})
+
+
+
+#Perform all-subset linear (gaussian) regression based on Akaike Information Criteria (AIC)
+res_bestglm <- bestglm(Xy = input_bestglm, family = binomial, IC = "AIC", method = "exhaustive")
+```
+
+>Yes, the model that is obtained as best is different from the full model fit in part e. It includes the variables thal, chest_pain_type, num_major_vessels, oldpeak_eq_st_depression and sex. The variables **thal and oldpeak_eq_st_depression** are found significant additionally compared to the all variable model. Also this model seems to be more fit as its AIC value is 106 whereas full model's AIC value is 116.5. Lesser the AIC value better the model.
+
+
+### (g) Interpret the model parameters of your model from part (f).
+
+>The variables thal, chest_pain_type and num_major_vessels are more significant compared to the other two variables(oldpeak_eq_st_depression and sex). The parameters are as follows:
+>
+    + *thal: Takes three values(normal; fixed defect; reversable defect )
+    + *chest_pain_type: Type of chest pain(1-4) where,
+        1: typical angina 
+        2: atypical angina 
+        3: non-anginal pain 
+        4: asymptomatic
+    + *num_major_vessels: Number of major vessels (0-3) colored by flourosopy
+    + *oldpeak_eq_st_depression: ST depression induced by exercise relative to rest.
+    + *sex: Gender of the person
+  
+  
+### (h) Use your test dataset and the predict function to obtain predicted probabilities of having heart disease for each case in the test data. Which model did you use for prediction and why? Interpret your results and use a visualization to support your interpretation. 
+
+```{r prediction, warning = FALSE}
+#Prediction using best model
+predictions_heart <- predict(res_bestglm$BestModel, heart_testData, type = "response")
+predictions_heart$heart_disease_present_pred <- ifelse(predictions_heart > 0.5, 1, 0)
+predictionList <- unlist(predictions_heart$heart_disease_present_pred)
+
+#Confusion Matrix
+heartConfusionMat <- confusionMatrix(as.factor(predictionList),
+                                     as.factor(heart_testData$heart_disease_present))
+
+#Fourfoldplot of confusion matrix
+fourfoldplot(heartConfusionMat$table)
+```
+
+>I have decided to use the model from the all subsets model selection procedure as its AIC value is low. After applying the prediction function and comparing it with the actual value, the accuracy rate of this model is 83.3%. Also in this case, mispredicting a person with heart disease as no disease is worse compared to vice versa. As this misprediction number is 5 and the sensitivity of the model is 0.866, this model is better. This can be seen clearly in the fourfoldplot of the confusion matrix.
+
+
+# Problem 2 (25 pts)
+
+In this problem we will use the (red) wine quality dataset from https://archive.ics.uci.edu/ml/datasets/Wine+Quality. More about this data (note we will only use the red wine dataset): The two datasets are related to red and white variants of the Portuguese "Vinho Verde" wine. For more details, consult: Web Link or the reference [Cortez et al., 2009]. Due to privacy and logistic issues, only physicochemical (inputs) and sensory (the output) variables are available (e.g. there is no data about grape types, wine brand, wine selling price, etc.).
+Suppose you want to explore the relationship between wine quality and other characteristics of the wine. Follow the questions below to perform this analysis.
+
+```{r read wineData, warning = FALSE}
+#Read data from the csv file
+wineData <- read.csv("winequality-red.csv", skip = 1, header = FALSE, sep = ";")
+
+#Reassign the column names
+colnames(wineData) <- c("FixedAcidity", "VolatileAcidity", "CitricAcid", "ResidualSugar",
+                        "Chlorides", "FreeSulfarDioxide", "TotalSulfarDioxide", "Density",
+                        "pH", "Sulphates", "Alcohol", "Quality")
+```
+
+
+### (a) Examine the bivariate relationships present in the data. Briefly discuss notable results. You might find the scatterplotMatrix() function available in the car package helpful.
+
+```{r scatterplot, warning = FALSE}
+#correlations of all numeric variables
+wine_corr <- cor(wineData)
+
+#Plot the correlations
+corrplot(wine_corr, method = "number")
+
+#Scatterplot Matrix
+pairs(~ FixedAcidity + VolatileAcidity + CitricAcid + ResidualSugar + 
+        Chlorides + FreeSulfarDioxide + TotalSulfarDioxide + Density + 
+        pH + Sulphates + Alcohol + Quality, data = wineData, 
+      main = "Fig 2a.1: Scatterplot Matrix of Wine Data")
+```
+
+>From the correlation matrix and Fig 2a.1, we can see that Quality is highly correlated with alcohol content, sulphates and citric acid positively. Also high quality wines has less amount of volatile acidity. Though the correlation values are not so high, these are high compared to other factors. Apart from quality, there is a strong positive correlation between free SO2 and total SO2(0.66766645048) and between fixed acidity and density(0.66804729212). Similarly, there is a strong negative correlation between alcohol amount and density(-0.49617977024. The high positive correlation between citric acid and fixed acidity(0.67170343476), and negative correlation between pH and fixed acidity(-0.68297819457) is obvious and hence need not be concentrated much.
+
+
+### (b) Fit a multiple linear regression model. How much variance in the wine quality do the predictor variables explain?
+
+```{r linear regression winedata, warning = FALSE}
+#Linear regression model for the wine data with all factors
+lm_wineData <- lm(Quality ~ FixedAcidity + VolatileAcidity + CitricAcid +
+                    ResidualSugar + Chlorides + FreeSulfarDioxide + TotalSulfarDioxide + 
+                    Density + pH + Sulphates + Alcohol, data = wineData)
+
+#Summary of the linear model
+summary(lm_wineData)
+```
+
+>The multiple linear model looks significant as its p-value is less than 0.05. Though the R-squared value is not high, its pretty acceptable and its significance cannot be interpreted without comparing it with another model. There are not any significant coefficient values of predictors but sulphates so to have a good positive coefficient. Among all the predictor's coefficient, density has a very high negative coefficient(-17.88). The predictors chlorides and volitile acidity also have high negative coefficient values.
+
+
+### (c) Evaluate the statistical assumptions in your regression analysis from part (b) by performing a basic analysis of model residuals and any unusual observations. Discuss any concerns you have about your model.
+
+```{r residual plot analysis, warning = FALSE}
+#Plotting the residuals of wine data linear model
+plot(lm_wineData$residuals, main = "Fig 2c.1: Residual plot of wine data")
+abline(h = 0, col = "red")
+
+#plot the linear regression model
+plot(lm_wineData, main = "Fig 2c.2: Residual plots of linear model - Wine data")
+```
+
+>From Fig 2c.1, we can see that the residuals are evenly spread across 0 axis and are few outliers. Also in the normal Q-Q plot we could see that the data points are aligned with a linear line.
+
+
+### (d) Use a stepwise model selection procedure of your choice to obtain a "best" fit model. Is the model different from the full model you fit in part (b)? If yes, how so?
+
+```{r stepwise model, warning = FALSE}
+#Applying stepwise selection model on wine data
+stepModel_wine <- stepAIC(lm_wineData, direction = "both", trace = FALSE)
+summary(stepModel_wine)
+
+```
+
+>Yes, the best model obtained from stepwise regression model selection has lesser number of predictor variables. It includes only volatile acidity, chlorides, free so2, total so2, pH, sulphates and alcohol. But the adjusted R squared value is not significantly higher compared to the full model. Both the R squared values are similar.
+ 
+
+### (e) Assess the generalizability of the model (from part (d)). Perform a 10-fold cross validation to estimate model performance. Report the results.
+
+```{r cross validation, warning = FALSE}
+#Run cross validation on the best model
+cv.lm(data = wineData, form.lm = stepModel_wine, m = 10, plotit = "Residual")
+
+```
+
+>From the above cross-validation we got the overall mean squared error value as low as 0.422. We could also see that the mean squared errors in all the folds are in the similar range of 0.3 to 0.5.
+
+### (f) Fit a regression tree using the same covariates in your "best" fit model from part (d). Use cross validation to select the "best" tree.
+
+```{r tree wineData, warning = FALSE}
+#Fitting a regression tree on the best fit model
+tree_wine <- tree(Quality ~ VolatileAcidity + Chlorides + FreeSulfarDioxide + TotalSulfarDioxide +
+                    pH + Sulphates + Alcohol, data = wineData)
+
+#Plot the tree model
+plot(tree_wine)
+text(tree_wine)
+
+#Apply cross validation on the tree model
+cvTree_wine <- cv.tree(tree_wine, FUN = prune.tree)
+
+#Plot the size vs variates
+par(mfrow = c(1,2))
+plot(cvTree_wine$size, cvTree_wine$dev, type = "b")
+plot(cvTree_wine$k, cvTree_wine$dev, type = "b")
+```
+
+>In the above plot, 'dev' corresponds to the cross-validation error rate. The tree with 8 terminal nodes results in the lowest cross-validation error rate, with 733 cross-validation errors which is considered the best tree.
+
+
+### (g) Compare the models from part (d) and (f) based on their performance. Which do you prefer? Be sure to justify your preference.
+
+>I prefer the tree model in part (f). This is because the residual standard error is 0.428 for the model in part (f), whereas the residual error is 0.648 for the model in part (d). Lesser the residual deviance, better the model.
+
+
+# Problem 3 (25 pts)
+
+The Wisconsin Breast Cancer dataset is available as a comma-delimited text file on the UCI Machine Learning Repository http://archive.ics.uci.edu/ml. Our goal in this problem will be to predict whether observations (i.e. tumors) are malignant or benign.
+
+### (a) Obtain the data, and load it into R by pulling it directly from the web. (Do not download it and import it from a CSV file.) Give a brief description of the data.
+
+```{r read data from web, warning = FALSE}
+#Read the csv data directly from web
+cancerData <- read.csv("http://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/breast-cancer-wisconsin.data")
+
+```
+
+>The data contains 698 rows and 11 columns. The details of the data frame is mentioned below.
+>  
+   --------------------------------------------------------
+   + Column Names        Attribute                Values
+   --------------------------------------------------------
+   + X1000025       Sample code number            id number
+   + X5             Clump Thickness               1 - 10
+   + X1             Uniformity of Cell Size       1 - 10
+   + X1.1           Uniformity of Cell Shape      1 - 10
+   + X1.2           Marginal Adhesion             1 - 10
+   + X2             Single Epithelial Cell Size   1 - 10
+   + X1.3           Bare Nuclei                   1 - 10
+   + X3             Bland Chromatin               1 - 10
+   + X1.4           Normal Nucleoli               1 - 10
+   + X1.5           Mitoses                       1 - 10
+   + X2.1           Cancer Presence               (2 for benign, 4 for malignant)
+ 
+ 
+### (b) Tidy the data, ensuring that each variable is properly named and cast as the correct data type. Discuss any missing data. 
+
+```{r tidy cancer data, warning = FALSE}
+#Renaming the columns appropriately
+colnames(cancerData) <- c("ID", "ClumpThickness", "CellSize_Uniformity", "CellShape_Uniformity", 
+                          "MarginalAdhesion", "Single_Epi_CellSize", "Bare_Nuclei",
+                          "Bland_Chromatin", "Normal_Nucleoli", "Mitoses", "Cancer_Presence")
+
+#Look into details of all column and its type
+str(cancerData)
+
+#Changing the data type of ID to numeric
+cancerData$ID <- as.numeric(cancerData$ID)
+
+#Remove the rows that has '?' in Bare_Nuclei column
+cancerData <- cancerData %>% filter(Bare_Nuclei != '?')
+
+#Changing the data type of Bare_Nuclei to integer
+cancerData$Bare_Nuclei <- as.integer(cancerData$Bare_Nuclei)
+
+#Change the values of cancerType to 0s and 1s
+cancerData$Cancer_Presence[cancerData$Cancer_Presence == 2] <- 0
+cancerData$Cancer_Presence[cancerData$Cancer_Presence == 4] <- 1
+```
+
+>There were 698 rows and 11 columns in the data. All were of type integer and the Bare_Nuclei column of type factor. The ID need not be of type integer. Hence its changed to numeric. Also the column Bare_Nuclei had ? in 16 rows. As the values are unknown for these rows, they are removed. The data type is also changed to integer for further analysis. Thus, after tidying the dataframe has 682 rows and 11 columns. Finally the column 'cancer_Presence' is changed to 0s(Benign) and 1s(Malign) instead of 2s and 4s
+
+
+### (c) Split the data into a training and test set such that a random 70% of the observations are in the training set.
+
+```{r spliting data, warning = FALSE}
+# code adapted from https://ragrawal.wordpress.com/2012/01/14/
+#dividing-data-into-training-and-testing-dataset-in-r/
+# Set seed for reproducibility
+set.seed(1127)
+
+#set indexes using sample to split the data in 70:30 ratio
+indexes <- sample(1:nrow(cancerData), size = 0.7 * nrow(cancerData))
+ 
+#Training dataset
+cancerData_train <- cancerData[indexes,]
+#Testing dataset
+cancerData_test <- cancerData[-indexes,]
+```
+
+
+### (d) Fit a regression model to predict whether tissue samples are malignant or benign. Classify cases in the validation set. Compute and discuss the resulting confusion matrix.
+
+```{r regression model cancerData, warning = FALSE}
+#Binomial regression model for cancer dataset with all the variables as predictors
+cancer_glm <- glm(Cancer_Presence ~ . -ID, 
+                 family = "binomial", data = cancerData_train)
+
+summary(cancer_glm)
+
+#Prediction using the model
+predictions_cancer <- predict(cancer_glm, cancerData_test, type = "response")
+predictions_cancer$cancer_present <- ifelse(predictions_cancer > 0.5, 1, 0)
+predictionList_cancer <- unlist(predictions_cancer$cancer_present)
+
+#Confusion Matrix
+cancerConfusionMat <- confusionMatrix(as.factor(predictionList_cancer),
+                                     as.factor(cancerData_test$Cancer_Presence))
+
+#Printing the confusion matrix
+cancerConfusionMat
+
+#Printing the confusion matrix table
+cancerConfusionMat$table
+```
+
+>I have built a regression model with all the columns as predictors. Using this model 'cancer_glm', the cancer presence is predicted for the test data. The resulting predictions are compared with the actual cancer presence. Based on this comparison, the model's accuracy is found to be 95.6%. In this case, false positives can be ignored as it does not impact in a bad way. But false negatives are something to be worried about as the patient with cancer could be ignored considering he/she does not have cancer. The above model has a good sensitivity of about 0.971.
+
+
+### (e) Fit a random forest model to predict whether tissue samples are malignant or benign. Classify cases in the validation set. Compute and discuss the resulting confusion matrix.
+
+```{r random forest model cancerData, warning = FALSE}
+#Set the seed for reproducability
+set.seed(1)
+
+#Random forest model for cancer dataset with all the variables as predictors
+cancer_rf <- randomForest(Cancer_Presence ~ . -ID, data = cancerData_train)
+cancer_rf
+
+#Prediction using the model
+predictions_cancer_rf <- predict(cancer_rf, cancerData_test)
+predictions_cancer_rf$cancer_present <- ifelse(predictions_cancer_rf > 0.5, 1, 0)
+predictionList_cancer_rf <- unlist(predictions_cancer_rf$cancer_present)
+
+# plot(predictionList_cancer_rf, cancerData_test$Cancer_Presence)
+# abline(0,1)
+
+#Confusion Matrix
+cancerConfusionMat_rf <- confusionMatrix(as.factor(predictionList_cancer_rf),
+                                     as.factor(cancerData_test$Cancer_Presence))
+
+#Printing the confusion matrix
+cancerConfusionMat_rf
+
+#Printing the confusion matrix table
+cancerConfusionMat_rf$table
+```
+
+>A randomforest model with all the columns as predictors is built. Using this model 'cancer_rf', the cancer presence is predicted for the test data. The resulting predictions are compared with the actual cancer presence. Based on this comparison, the model's accuracy is found to be 96.6%. As in the previous model, false positives can be ignored as it does not impact in a worse way. But false negatives are something to be worried about as the patient with cancer could be ignored considering he/she does not have cancer. This model has a good sensitivity of about 0.978.
+
+
+### (f) Compare the models from part (d) and (e) using ROC curves. Which do you prefer? Be sure to justify your preference.
+
+```{r ROC curves, warning = FALSE}
+#ROC curve for the logistic regression model
+roc_cancer_glm <- roc(cancerData_test$Cancer_Presence ~ predictionList_cancer) 
+plot(roc_cancer_glm) #Plotting the roc curve
+auc(roc_cancer_glm) #Calculating the area under the roc curve
+
+#ROC curve for the random forest model
+roc_cancer_rf <- roc(cancerData_test$Cancer_Presence ~ predictionList_cancer_rf) 
+plot(roc_cancer_rf) #Plotting the roc curve
+auc(roc_cancer_rf) #Calculating the area under the roc curve
+```
+
+>Both the ROC curve looks perfect and has a top left curve. The ares are also closer to 1. But as we have to choose one of the model, I would prefer random forest model as its area under the ROC curve(0.959) is slightly higher than the logistic regression model(0.948). Another reason for prefering random forest model is the number of false negatives in this model is lesser compared to the logistice regression model.
+
+
+# Problem 4 (15 pts)
+## Please answer the questions below by writing a short response.
+
+### (a) Describe three real-life applications in which classification might be useful. Describe the response, as well as the predictors. Is the goal in each application inference or prediction? Explain your answer.
+
+> 1. From a given demographic and economic status data, predict whether a particular person will vote for democratic or republican candidate 
+  +  **Response:** Republican or democratic
+  +  **Predictors:** Age, Gender, Ethnicity, Income, State, Occupation, Education, etc.,
+  +  **Goal:** Prediction
+Based on the values of predictors and past voting model, we would be able to assign weights for each predictor and predict the voting preference of each person.   
+
+> 2. If a potential home mortgage buyer will default or not in the future. 
+  +  **Response:** Default and non-default. 
+  +  **Predictors:** Income, Education, Banking balance, Previous credits, etc.,
+  +  **Goal:** Prediction
+Consider the dataset of 1,000 samples which has the details of clients who have has a home mortgage in past. By analysing the 1,000 samples, we can do the classification regression analysis to predict if the buyer will default or not. 
+
+> 3. Predict if the Flu Polio vaccine trials on a group of children are successful or not.
+  +  **Response:** Did the child get Flu or not
+  +  **Predictors:** Age, Geography, Ethnicity, Demographic, Economic status, 
+     General health condition, Control/Test group, etc., 
+  +  **Goal:** Prediction
+This is more like an experimental analysis. Consider experimenting on a pre-assigned set of children whose demographic and economic status are known. The flu vaccination is trailed on these group and tested for if they are able to get prevented from flu. As the response would be binary(yes or no), the goal is prediction.
+
+
+### (b) Describe three real-life applications in which regression might be useful. Describe the response, as well as the predictors. Is the goal in each application inference or predictions? Explain your answer.
+
+> 1. Finding the average house sale price in any neighborhood over a period of time. 
+  +  **Response:** Average house price in the particular neighborhood in a specific time period.
+  +  **Predictors:** Size of the house, No of bedrooms/restrooms/kitchen/garages, Quality of house,
+     Proximity to transit, Parks, Schools, Crime Rate, Year built, Price Flux in surrounding
+     neighborhoods etc.,   
+  +  **Goal:** Inference.
+Using a training set the weights of each predictor could be assigned and then this model to be used on a test set to predict the house price. Then by comparing the actual and predicted prices, the accuracy of the model can be found. Then the model could be fine tuned by adding in or removing the predictors from the model. This gives us an inference about the housing price in a specific neighbourhood at a particular time period. 
+
+> 2. Predicting the height of a child
+  +  **Response:** Height of a child
+  +  **Predictors:** Mother's height, Father's height, Daily diet and Daily exercise. 
+  +  **Goal:** Inference
+A regression model is to be built to predict the height of a child based on various factors. This helps us to examine the strength of association between a child's height and the predictors. The data could be collected from a set of children and their parents with which a regression model could be built. 
+
+> 3. Predicting the total sales for next year from previous year's sales
+  +  **Response:** Sales in next year
+  +  **Predictors:** No of people visited, New items added, New items sold, Month of sales, 
+     Customer happiness index, Customer easy finding index, Average number of items sold per 
+     customer visit, discounts provided, Average time required per visit, Number of sales person 
+     per day etc.,
+  +  **Goal:** Inference
+Based on all the predictors and the past sales model, the sales could be predicted monthwise for the future years. As it is a range of values to be predicted, its an inference from the dataset.
+
+
+### (c) What are the advantages and disadvantages of a very flexible (versus a less flexible) approach for regression or classification? Under what circumstances might a more flexible approach be preferred to a less flexible approach? When might a less flexible approach be preferred?
+  
+**Advantages of a Very Flexible Model**
+  + It can take full advantage of using a large sample size. Thus it makes an elaborate model 
+    without any assumptions and would be more close to original function. 
+  + It also allows to find nonlinear effects.
+  + A flexible model tends to work better when the variance of the data points is small.
+  + It may give a better fit for non-linear models thus decreasing the bias.
+
+**Disadvantages of a Very Flexible Model**
+  + A flexible model can be prone to overfitting of the predictors in a high dimensional space
+    leading to large test error. In order to avoid overfitting we need to have large number of 
+    sample data.
+  + A flexible model is prone to overfitting of the known data points especially when the
+    variance (and associated error or noise) is high.
+  + A flexible model will not work well with the datsets of smaller size - an inflexible model
+    would also not work well, however would perform better as it would not overfit on the limited
+    data points.
+  + As it estimates using a greater number of parameters, it follows the noise too closely(overfit)
+    increasing the variance.  
+    
+>A more flexible approach would be preferred when we are interested in prediction and not the interpretability of the results. On the other hand, a less flexible approach would be preferred when we are interested in inference and the interpretability of the results. 
+
+**References:** https://rpubs.com/ppaquay/65557, https://rpubs.com/shijbian/12455, 
+https://github.com/darraghdog/STATS216-2015-Homework/blob/master/HW1/STATS216-2015-Homework2_V4.Rmd
+
+
+# Problem 5 (10 pts)
+
+Suppose we have a dataset with five predictors, X1 = GPA, X2 = IQ, X3 = Degree (1 for B.A. degree holder, and 0 for B.S. degree holder), X4 = InteractionbetweenGPAandIQ, and X5 = InteractionbetweenGPAandDegree. The response is starting salary after graduation (in thousands of dollars). Suppose we use least squares to fit the model and get B0 = 50; B1 = 20, B2 = 0.07, B3 = 35, B4 = 0.01, and B5 = ???10.
+
+### (a) Which answer is correct and why?
+  + i. For a fixed value of IQ and GPA, B.A. degree holders earn more on average than B.S. degree
+    holders.
+  + ii. For a fixed value of IQ and GPA, B.S. degree holders earn more on average than B.A. degree  
+    holders.
+  + iii. For a fixed value of IQ and GPA, B.S. degree holders earn more on average than B.A. degree
+    holders provided that the GPA is high enough.
+  + iv. For a fixed value of IQ and GPA, B.A. degree holders earn more on average than B.S. degree
+    holders provided that the GPA is high enough.
+
+> The fitted model would look like,
+  $$y^ = 50 + (20 x GPA) + (0.07 x IQ) + (35 x Degree) + (0.01 x GPA x IQ) - (10 x GPA x Degree)$$
+  
+> Which becomes for BA Degree holders,
+  $$y^ = 85 + (10 x GPA) + (0.07 x IQ) + (0.01 x GPA x IQ)$$
+
+> And for BS Degree holders, this becomes,
+  $$y^ = 50 + (20 x GPA) + (0.07 x IQ) + (0.01 x GPA x IQ)$$
+
+In order to find the true statement, I have assumed a random value to IQ and GPA and substituted it in both the B.A. and B.S. degree equations. By doing this, I have found that B.S. degree holders earn more than B.A degree holders. Thus either (ii) or (iii) should be correct. In order to find this, I have used a lower GPA of 2 and a higher GPA of 4 in the equation. This leads me to the correct answer of (iii). Let's reconfirm it by solving the equation,
+
+>For a B.S degree holder to have a higher predicted starting salary than a B.A degree holder having the same IQ and GPA, it needs to be that, 
+  [50 + (20 x GPA) + (0.07 x IQ) + (0.01 x GPA x IQ)] is greater than 
+  [50 + (20 x GPA) + (0.07 x IQ) + 35 + (0.01 x GPA x IQ) ??? (10 x GPA)]
+
+>Which is,
+ 0 > 35 ??? 10 x GPA  ==>> (10 x GPA) > 35  ==>> GPA > 3.5.
+ 
+>Thus, (iii) For a fixed value of IQ and GPA, B.S. degree holders earn more on average than B.A. degree holders provided that the GPA is high enough is correct.
+
+
+### (b) Predict the salary of a B.A. with IQ of 110 and a GPA of 4.0.
+
+>In order to predict the salary of a B.A. degree holder we would use the corresponding equation, which is, 
+  $$y^ = 85 + (10 x GPA) + (0.07 x IQ) + (0.01 x GPA x IQ)$$
+>Substituting the given values,
+  Predicted salary = 85 + (10 x 4) + (0.07 x 110) + (0.01 x 4 x 110)
+  Predicted salary = 85 + 40 + 7.7 + 4.4
+  Predicted salary = 137.1
+
+Thus the predicted salary for a B.A. degree holder with IQ of 110 and GPA of 4.0 is **$137,100**
+
+
+### (c) True or false: Since the coefficient for the GPA/IQ interaction term is very small, there is little evidence of an interaction effect. Justify your answer.
+
+>The above statement is **false**, as the statistical significance of an interaction term is different from the magnitude of the interaction term. It is possible to have a lot of evidence for a small effect. Also, a small coefficient does not mean the interaction effect is small, as it is very sensitive to the units of the two variables. This can also be checked by looking at the p-value and F-Statistic of the coefficient to determine its statistical significance.
+
+
+
